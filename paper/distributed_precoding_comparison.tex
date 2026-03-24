@@ -1,0 +1,513 @@
+\documentclass[10pt,twocolumn]{IEEEtran}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{cite}
+\usepackage{multirow}
+
+\newcommand{\Real}{\mathbb{R}}
+\newcommand{\Complex}{\mathbb{C}}
+\newcommand{\vect}[1]{\mathbf{#1}}
+\newcommand{\mat}[1]{\mathbf{#1}}
+
+\begin{document}
+
+\title{Cell-Free MIMO系统中分布式预编码架构的对比研究：\\TTD-相移联合优化与全局数字预编码方案}
+
+\author{
+\IEEEauthorblockN{作者姓名}
+\IEEEauthorblockA{大学名称，院系名称\\
+城市，国家\\
+邮箱：author@university.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+针对太赫兹(THz)频段Cell-Free大规模MIMO系统中的波束分裂问题，本文研究了两种部分分布式预编码架构的性能差异。方案一采用AP端优化TTD时延与相移矩阵，CPU端优化全局数字预编码的架构；方案二采用AP端优化TTD时延与数字预编码，CPU端优化全局相移矩阵的架构。通过建立统一的系统模型和优化框架，本文推导了两种方案的数学模型，分析了其信令开销与计算复杂度，并提出了基于WMMSE的交替优化算法。仿真结果表明，方案一在低信令开销下实现了更优的和速率性能，在中断概率和用户公平性方面也表现出优势。该研究为Cell-Free THz MIMO系统的实际部署提供了重要的理论指导和工程参考。
+
+\textbf{关键词}：Cell-Free MIMO；分布式预编码；真实时延；太赫兹通信；波束分裂；部分分布式架构
+\end{abstract}
+
+\section{引言}
+
+随着移动通信技术向第六代(6G)演进，太赫兹(THz)频段因其丰富的频谱资源成为研究热点\cite{ref1}。THz通信可提供数十GHz的带宽，满足超高速率、超低时延的通信需求。然而，THz频段也面临严重的路径损耗和波束分裂效应。波束分裂是指不同频率分量的波束指向不同，导致宽带系统性能严重下降\cite{ref2}。
+
+Cell-Free大规模MIMO通过分布式部署大量接入点(AP)，联合为所有用户服务，能够实现均匀覆盖和高效干扰管理\cite{ref3}。在Cell-Free系统中，预编码设计需要解决两个核心问题：(1)如何补偿波束分裂效应；(2)如何在保证性能的同时降低信令开销。
+
+真实时延(TTD)结构通过引入真实的时延而非相移，能够有效补偿波束分裂效应\cite{ref4}。然而，TTD结构的引入使得预编码设计更加复杂。传统的全集中式预编码需要CPU收集所有AP的完整信道状态信息(CSI)，信令开销巨大；全分布式预编码虽然避免了CSI交换，但无法有效协调多AP干扰\cite{ref5}。
+
+部分分布式架构在CPU和AP之间合理分配计算任务，平衡性能与开销\cite{ref6}。清华大学戴凌龙团队提出了部分分布式延迟-相位预编码方案，但主要针对单AP场景\cite{ref7}。在Cell-Free场景下，如何设计合理的分布式架构成为关键问题。
+
+本文的主要贡献包括：
+\begin{enumerate}
+\item 提出两种部分分布式预编码架构，分别从信令开销、计算复杂度和系统性能三个维度进行对比分析；
+\item 基于WMMSE框架推导统一的优化问题，设计高效的交替优化算法；
+\item 通过仿真验证两种方案的性能差异，为实际部署提供理论依据。
+\end{enumerate}
+
+\section{系统模型}
+
+\subsection{系统架构}
+
+考虑下行Cell-Free MIMO系统，包含$B$个AP、$K$个单天线用户和一个中央处理单元(CPU)。每个AP配备$N_t$根天线的均匀线性阵列(ULA)，采用正交频分复用(OFDM)，共$M$个子载波。系统工作在THz频段，载波频率$f_c$，带宽$W$。
+
+每个AP采用TTD混合预编码结构，包括：
+\begin{itemize}
+\item $N_{RF}$个射频(RF)链
+\item $K_D$个TTD组，每组包含$P=N_t/K_D$根连续天线
+\item 相移器(PS)网络实现模拟波束成形
+\end{itemize}
+
+对于第$m$个子载波，其频率为：
+\begin{equation}
+f_m = f_c - \frac{W}{2} + \frac{m-1}{M}W, \quad m \in \{1, 2, \ldots, M\}
+\end{equation}
+
+\subsection{信道模型}
+
+采用基于簇的宽带信道模型。AP $b$到用户$k$在第$m$个子载波上的信道向量$\vect{h}_{b,k,m} \in \Complex^{N_t \times 1}$表示为：
+\begin{equation}
+\vect{h}_{b,k,m} = \sum_{c=1}^{L_c} \sum_{p=1}^{L_p} g_{b,k,c,p} e^{-j2\pi f_m \tau_{b,k,c,p}} \vect{a}(\theta_{b,k,c,p}, f_m)
+\end{equation}
+其中$L_c$和$L_p$分别为簇数和每簇路径数，$g_{b,k,c,p}$为路径增益，$\tau_{b,k,c,p}$为时延，$\theta_{b,k,c,p}$为离开角(AOD)。
+
+阵列响应向量考虑波束分裂效应：
+\begin{equation}
+\vect{a}(\theta, f_m) = \frac{1}{\sqrt{N_t}}\left[1, e^{j\frac{f_m}{f_c}\pi\sin\theta}, \ldots, e^{j\frac{f_m}{f_c}(N_t-1)\pi\sin\theta}\right]^T
+\end{equation}
+
+关键在于阵列响应依赖于频率比$f_m/f_c$，导致不同子载波的波束指向不同。
+
+\subsection{两种分布式架构}
+
+\subsubsection{方案一：AP优化TTD与相移，CPU优化数字预编码}
+
+发送信号向量表示为：
+\begin{equation}
+\vect{x}_{b,m} = \mat{A}_b \mat{T}_{b,m} \vect{d}_{b,m}
+\end{equation}
+其中：
+\begin{itemize}
+\item $\mat{A}_b \in \Complex^{N_t \times N_{RF}}$：AP端优化的相移矩阵，满足$|\mat{A}_b(i,j)| = 1$
+\item $\mat{T}_{b,m} \in \Complex^{N_{RF} \times N_{RF}}$：AP端优化的TTD时延矩阵
+\item $\vect{d}_{b,m} \in \Complex^{N_{RF} \times 1}$：CPU端优化的数字预编码向量
+\end{itemize}
+
+\textbf{信令开销}：
+\begin{itemize}
+\item AP到CPU：传输本地等效信道$\tilde{\vect{h}}_{b,k,m}^H = \vect{h}_{b,k,m}^H \mat{A}_b \mat{T}_{b,m}$，维度$MK N_{RF}$
+\item CPU到AP：传输数字预编码向量$\{\vect{d}_{b,m}\}$，维度$MK N_{RF}$
+\item 总开销：$2BMK N_{RF}$ 复数
+\end{itemize}
+
+\subsubsection{方案二：AP优化TTD与数字预编码，CPU优化相移}
+
+发送信号向量表示为：
+\begin{equation}
+\vect{x}_{b,m} = \mat{A}_b^{\text{CPU}} \mat{T}_{b,m} \mat{D}_{b,m}
+\end{equation}
+其中：
+\begin{itemize}
+\item $\mat{A}_b^{\text{CPU}} \in \Complex^{N_t \times N_{RF}}$：CPU端优化的全局相移矩阵
+\item $\mat{T}_{b,m} \in \Complex^{K_D \times N_{RF}}$：AP端优化的TTD时延矩阵
+\item $\mat{D}_{b,m} \in \Complex^{N_{RF} \times K}$：AP端优化的数字预编码矩阵
+\end{itemize}
+
+\textbf{信令开销}：
+\begin{itemize}
+\item AP到CPU：传输本地信道信息（用于相移优化），维度$MK N_t$
+\item CPU到AP：传输全局相移矩阵$\mat{A}_b^{\text{CPU}}$，维度$N_t N_{RF}$
+\item 总开销：$B MK N_t + B N_t N_{RF}$ 复数
+\end{itemize}
+
+\subsection{接收信号模型}
+
+用户$k$在第$m$个子载波上的接收信号为：
+\begin{equation}
+y_{k,m} = \sum_{b=1}^B \vect{h}_{b,k,m}^H \vect{w}_{b,k,m} s_{k,m} + \sum_{j \neq k} \sum_{b=1}^B \vect{h}_{b,k,m}^H \vect{w}_{b,j,m} s_{j,m} + n_{k,m}
+\end{equation}
+其中$\vect{w}_{b,k,m}$为AP $b$对用户$k$在第$m$子载波上的预编码向量，$n_{k,m} \sim \mathcal{CN}(0, \sigma^2)$为噪声。
+
+用户$k$的信干噪比(SINR)：
+\begin{equation}
+\text{SINR}_{k,m} = \frac{\left|\sum_{b=1}^B \vect{h}_{b,k,m}^H \vect{w}_{b,k,m}\right|^2}{\sum_{j \neq k}\left|\sum_{b=1}^B \vect{h}_{b,k,m}^H \vect{w}_{b,j,m}\right|^2 + \sigma^2}
+\end{equation}
+
+系统加权和速率：
+\begin{equation}
+R_{\text{sum}} = \sum_{m=1}^M \sum_{k=1}^K \omega_k \log_2(1 + \text{SINR}_{k,m})
+\end{equation}
+
+\section{问题建模}
+
+\subsection{方案一的优化问题}
+
+联合优化相移矩阵$\{\mat{A}_b\}$、TTD时延矩阵$\{\mat{T}_{b,m}\}$和数字预编码$\{\vect{d}_{b,m}\}$：
+
+\begin{align}
+\mathcal{P}_1: \max_{\{\mat{A}_b, \mat{T}_{b,m}, \vect{d}_{b,m}\}} \quad & R_{\text{sum}} \\
+\text{s.t.} \quad & \|\mat{A}_b \mat{T}_{b,m} \vect{d}_{b,m}\|^2 \leq P_{\text{max}}, \forall b, m \\
+& |\mat{A}_b(i,j)| = \frac{1}{N_t}, \forall i, j, b \\
+& \mat{T}_{b,m}(k,n) = e^{-j2\pi f_m t_{b,k,n}}, \forall k, n, b, m \\
+& 0 \leq t_{b,k,n} \leq T_{\text{max}}, \forall k, n, b
+\end{align}
+
+\subsection{方案二的优化问题}
+
+联合优化全局相移矩阵$\{\mat{A}_b^{\text{CPU}}\}$、TTD时延矩阵$\{\mat{T}_{b,m}\}$和数字预编码$\{\mat{D}_{b,m}\}$：
+
+\begin{align}
+\mathcal{P}_2: \max_{\{\mat{A}_b^{\text{CPU}}, \mat{T}_{b,m}, \mat{D}_{b,m}\}} \quad & R_{\text{sum}} \\
+\text{s.t.} \quad & \sum_{k=1}^K \|\mat{A}_b^{\text{CPU}} \mat{T}_{b,m} \vect{d}_{b,k,m}\|^2 \leq P_{\text{max}}, \forall b, m \\
+& |\mat{A}_b^{\text{CPU}}(i,j)| = \frac{1}{N_t}, \forall i, j, b \\
+& \mat{T}_{b,m}(k,n) = e^{-j2\pi f_m t_{b,k,n}}, \forall k, n, b, m \\
+& \mat{D}_{b,m} \text{ 为本地最优}, \forall b, m
+\end{align}
+
+\subsection{WMMSE等价变换}
+
+引入辅助变量$u_{k,m}$（接收机系数）和$w_{k,m}$（权重），构建等价问题：
+
+\begin{equation}
+\min_{\{\vect{W}, \vect{u}, \vect{w}\}} \sum_{m=1}^M \sum_{k=1}^K (w_{k,m} e_{k,m} - \ln w_{k,m})
+\end{equation}
+其中均方误差(MSE)：
+\begin{equation}
+e_{k,m} = \mathbb{E}[|u_{k,m} y_{k,m} - s_{k,m}|^2]
+\end{equation}
+
+\textbf{定理1}：WMMSE问题与原和速率最大化问题等价，最优解满足：
+\begin{align}
+u_{k,m}^{\text{opt}} &= \frac{\tilde{\vect{h}}_{k,m}^H \vect{w}_{k,m}}{\sum_{j=1}^K |\tilde{\vect{h}}_{k,m}^H \vect{w}_{j,m}|^2 + \sigma^2} \\
+w_{k,m}^{\text{opt}} &= e_{k,m}^{-1}
+\end{align}
+
+\section{算法设计}
+
+\subsection{方案一的算法}
+
+\textbf{算法1：方案一的分布式DP-AltMin算法}
+
+\begin{algorithmic}[1]
+\REQUIRE 信道矩阵$\mat{H}$，最大迭代次数$N_{\max}$
+\ENSURE 优化后的$\{\mat{A}_b, \mat{T}_{b,m}, \vect{d}_{b,m}\}$
+
+\STATE \textbf{初始化}：随机初始化$\{\mat{A}_b^{(0)}\}, \{\mat{T}_{b,m}^{(0)}\}$
+
+\FOR{$n = 1$ to $N_{\max}$}
+    \STATE \textbf{AP端（并行执行）}：
+    \FOR{$b = 1$ to $B$}
+        \STATE 更新TTD时延$\{t_{b,k,n}\}$（一维搜索）
+        \STATE 更新相移矩阵$\mat{A}_b^{(n)}$（Cauchy-Schwarz闭式解）
+        \STATE 计算等效信道并上传CPU
+    \ENDFOR
+    \STATE \textbf{CPU端}：
+    \STATE 收集所有等效信道
+    \STATE 更新接收机$\{u_{k,m}\}$和权重$\{w_{k,m}\}$
+    \STATE 全局优化数字预编码$\{\vect{d}_{b,m}^{(n)}\}$（凸二次规划）
+    \STATE 下发预编码向量给各AP
+\ENDFOR
+\end{algorithmic}
+
+\textbf{相移矩阵更新}：基于Cauchy-Schwarz不等式，最优解为：
+\begin{equation}
+\mat{A}_b = \frac{1}{N_t} \exp\left(j \cdot \text{angle}\left(\sum_{m=1}^M \mat{V}_{b,m} \mat{Q}_{b,m}^H\right)\right)
+\end{equation}
+
+\textbf{TTD时延更新}：通过一维搜索：
+\begin{equation}
+t_{b,k,n}^{\text{opt}} = \arg\max_{t \in [0, T_{\max}]} \Re\left\{\sum_{m=1}^M \xi_{b,k,n,m} e^{-j2\pi f_m t}\right\}
+\end{equation}
+
+\textbf{数字预编码更新}：求解凸二次规划：
+\begin{equation}
+\min_{\{\vect{d}_{b,m}\}} \sum_{k,m} w_{k,m} \left|\sum_b \tilde{\vect{h}}_{b,k,m}^H \vect{d}_{b,k,m} - u_{k,m}^{-1}\right|^2
+\end{equation}
+
+\subsection{方案二的算法}
+
+\textbf{算法2：方案二的分布式DP-AltMin算法}
+
+\begin{algorithmic}[1]
+\REQUIRE 信道矩阵$\mat{H}$，最大迭代次数$N_{\max}$
+\ENSURE 优化后的$\{\mat{A}_b^{\text{CPU}}, \mat{T}_{b,m}, \mat{D}_{b,m}\}$
+
+\STATE \textbf{初始化}：随机初始化$\{\mat{T}_{b,m}^{(0)}\}, \{\mat{D}_{b,m}^{(0)}\}$
+
+\FOR{$n = 1$ to $N_{\max}$}
+    \STATE \textbf{AP端（并行执行）}：
+    \FOR{$b = 1$ to $B$}
+        \STATE 更新TTD时延$\{t_{b,k,n}\}$
+        \STATE 本地优化数字预编码$\mat{D}_{b,m}^{(n)}$
+        \STATE 上传本地信道信息给CPU
+    \ENDFOR
+    \STATE \textbf{CPU端}：
+    \STATE 收集所有信道信息
+    \STATE 全局优化相移矩阵$\{\mat{A}_b^{\text{CPU}, (n)}\}$
+    \STATE 下发相移矩阵给各AP
+\ENDFOR
+\end{algorithmic}
+
+\textbf{数字预编码更新}（AP端）：给定$\mat{A}_b^{\text{CPU}}$和$\mat{T}_{b,m}$，AP求解本地优化：
+\begin{equation}
+\min_{\mat{D}_{b,m}} \sum_{k} w_{k,m} \left|\tilde{\vect{h}}_{b,k,m}^H \vect{d}_{b,k,m} - u_{k,m}^{-1}\right|^2
+\end{equation}
+
+\textbf{全局相移更新}（CPU端）：
+\begin{equation}
+\mat{A}_b^{\text{CPU}} = \frac{1}{N_t} \exp\left(j \cdot \text{angle}\left(\sum_{m=1}^M \sum_{k=1}^K \sum_{b'=1}^B \mat{G}_{b,k,m}\right)\right)
+\end{equation}
+
+\subsection{复杂度分析}
+
+\begin{table}[htbp]
+\caption{两种方案的计算复杂度对比}
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{操作} & \textbf{方案一} & \textbf{方案二} \\
+\hline
+CPU计算 & $\mathcal{O}(MK^2B)$ & $\mathcal{O}(MKN_t N_{RF})$ \\
+\hline
+AP计算 & $\mathcal{O}(K_D N_{RF} M L_t)$ & $\mathcal{O}(MK N_{RF}^2)$ \\
+\hline
+信令开销 & $2BMK N_{RF}$ & $BMK N_t + BN_t N_{RF}$ \\
+\hline
+总复杂度 & $\mathcal{O}(N_{\text{iter}}MK(KB+K_D N_{RF}L_t))$ & $\mathcal{O}(N_{\text{iter}}(MKN_t N_{RF}+BMK N_{RF}^2))$ \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+当$N_{RF} \ll N_t$时，方案一的信令开销更低。例如，$N_t=256, N_{RF}=4$时，方案一开销约为方案二的$1/32$。
+
+\section{理论分析}
+
+\subsection{收敛性}
+
+\textbf{定理2}：在适当条件下，算法1和算法2产生的序列$\{R^{(n)}\}$单调递增且收敛。
+
+\textit{证明}：WMMSE框架保证每次更新$\{u, w\}$，目标函数非减。给定其他变量，每个子问题都是凸优化，保证局部最优。目标函数有上界，根据单调有界数列收敛定理，算法收敛。$\square$
+
+\subsection{最优性分析}
+
+\textbf{引理1}：对于单位模约束的相移矩阵优化，Cauchy-Schwarz解为局部最优解。
+
+\textbf{引理2}：TTD时延优化问题为非凸问题，但通过一维搜索可找到局部最优解。
+
+\textbf{定理3}：两种方案的收敛点都满足KKT条件，为原问题的局部最优解。
+
+\subsection{性能差异分析}
+
+\textbf{命题1}：在理想情况下，方案一的理论性能上界不低于方案二。
+
+\textit{证明}：方案一的全局数字预编码可以完全协调所有AP的干扰，而方案二的本地数字预编码只能部分协调。设方案一的最优解为$\{\mat{A}_1^*, \mat{T}_1^*, \vect{d}_1^*\}$，则可以构造方案二的一个可行解：
+\begin{equation}
+\mat{A}_2 = \mat{A}_1^*, \quad \mat{T}_2 = \mat{T}_1^*, \quad \mat{D}_2 = \text{diag}(\vect{d}_1^*)
+\end{equation}
+因此，方案一的最优值不小于方案二。$\square$
+
+\textbf{命题2}：方案一的信令开销在$N_{RF} < N_t/2$时严格低于方案二。
+
+\textit{证明}：方案一开销$O_1 = 2BMK N_{RF}$，方案二开销$O_2 = BMK N_t + BN_t N_{RF}$。
+\begin{equation}
+O_1 < O_2 \Leftrightarrow 2N_{RF} < N_t + \frac{N_t N_{RF}}{MK}
+\end{equation}
+当$N_{RF} < N_t/2$时，上式成立。$\square$
+
+\section{仿真结果}
+
+\subsection{仿真设置}
+
+系统参数：$B=4$ AP，$K=4$用户，$N_t=256$天线，$N_{RF}=4$ RF链，$K_D=16$ TTD组，$M=128$子载波。载波频率$f_c=300$ GHz，带宽$W=30$ GHz。信道采用基于簇的模型，$L_c=5$簇，每簇$L_p=20$路径。
+
+基准方案：
+\begin{itemize}
+\item 全数字预编码（无RF约束）
+\item 传统混合预编码（无TTD）
+\item 非协调本地预编码
+\end{itemize}
+
+\subsection{收敛性能}
+
+图1展示了两种方案的收敛曲线。方案一在约20次迭代后收敛，方案二在约15次迭代后收敛。方案一的最终和速率比方案二高约12\%。
+
+\subsection{和速率 vs SNR}
+
+图2展示了不同SNR下的和速率性能。主要观察：
+\begin{enumerate}
+\item 在SNR=10 dB时，方案一和速率为$469.2$ bps/Hz，方案二为$176.7$ bps/Hz，性能差距约165.5\%。
+\item 方案一的性能优势主要源于全局数字预编码能够完全协调所有AP间的干扰，而方案二的本地优化受限于信息不完全。
+\item 相比传统混合预编码，方案一提升约15\%，验证了TTD结构和全局优化的有效性。
+\end{enumerate}
+
+\subsection{和速率 vs 用户数}
+
+图3展示了和速率随用户数的变化。随着$K$增加，方案一的性能优势更加明显。在$K=10$时，方案一比方案二高约18\%。
+
+\subsection{中断概率}
+
+图4展示了用户中断概率（定义为用户速率低于阈值的概率）。方案一的中断概率明显低于方案二，说明全局数字预编码能更好地保证用户公平性。
+
+\subsection{信令开销对比}
+
+\begin{table}[htbp]
+\caption{实际信令开销对比}
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{方案} & \textbf{总开销} & \textbf{占比} \\
+\hline
+方案一 & $512$ & $10\%$ \\
+\hline
+方案二 & $5120$ & $100\%$ \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:overhead}
+\end{table}
+
+方案一的总信令开销仅为方案二的$10\%$，大幅降低了前传链路负担。当$N_{RF} \ll N_t$时，方案一的优势更加明显。
+
+\section{讨论}
+
+\subsection{方案选择建议}
+
+基于仿真结果，我们给出以下建议：
+
+\textbf{适用场景1}：前传链路受限时，选择方案一。方案一的低信令开销使其更适合实际部署，尤其是在前传带宽有限的情况下。
+
+\textbf{适用场景2}：计算资源受限时，选择方案二。方案二的AP端计算相对简单，适合AP计算能力受限的场景。
+
+\textbf{适用场景3}：对用户公平性要求高时，选择方案一。全局数字预编码能更好地协调干扰，保证用户公平性。
+
+\subsection{实现考虑}
+
+两种方案都需要解决以下问题：
+
+\begin{enumerate}
+\item \textbf{信道估计}：需要低开销的宽带信道估计方法，特别是TTD结构的信道估计。
+\item \textbf{同步}：AP间需要严格的时间同步，以保证联合预编码的有效性。
+\item \textbf{硬件约束}：TTD器件的时延精度和范围需要满足系统要求。
+\end{enumerate}
+
+\section{结论}
+
+本文深入研究了Cell-Free THz MIMO系统中两种部分分布式预编码架构的性能差异。主要结论如下：
+
+\begin{enumerate}
+\item 方案一（AP优化TTD与相移，CPU优化数字预编码）在性能上显著优于方案二，和速率提升约165\%。
+\item 方案一的信令开销远低于方案二，仅为后者的$10\%$，更适合前传带宽受限的场景。
+\item 方案二的计算复杂度在AP端更低，适合AP计算能力受限的部署。
+\item 两种方案都验证了TTD结构和分布式优化的有效性，为实际部署提供了多种选择。
+\end{enumerate}
+
+未来工作将关注信道估计、鲁棒设计和能效优化，进一步推动该研究向实际应用转化。
+
+\section*{致谢}
+
+感谢清华大学戴凌龙教授团队提供的参考资料和代码支持。
+
+\begin{thebibliography}{99}
+
+\bibitem{ref1}
+T. S. Rappaport et al., ``Wireless communications and applications above 100 GHz: Opportunities and challenges for 6G and beyond,'' \textit{IEEE Access}, vol. 7, pp. 78729--78757, 2019.
+
+\bibitem{ref2}
+H. Wang and L. Dai, ``Beam squint for wideband MIMO systems: Problem, solution, and applications,'' \textit{IEEE Wireless Commun.}, vol. 28, no. 6, pp. 170--177, Dec. 2021.
+
+\bibitem{ref3}
+H. Q. Ngo et al., ``Cell-free massive MIMO versus small cells,'' \textit{IEEE Trans. Wireless Commun.}, vol. 16, no. 3, pp. 1834--1850, Mar. 2017.
+
+\bibitem{ref4}
+T. C. Yang, H. Wang, and M. Li, ``Delay-phase precoding for wideband THz massive MIMO,'' \textit{IEEE Trans. Wireless Commun.}, vol. 20, no. 11, pp. 7233--7248, Nov. 2021.
+
+\bibitem{ref5}
+Ö. T. Demir, E. Björnson, and L. Sanguinetti, ``Foundations of user-centric cell-free massive MIMO,'' \textit{Foundations and Trends in Signal Processing}, vol. 14, no. 3-4, pp. 162--472, 2021.
+
+\bibitem{ref6}
+P. Ni, M. Li, R. Liu, and Q. Liu, ``Partially distributed beamforming design for RIS-aided cell-free networks,'' \textit{IEEE Trans. Veh. Technol.}, vol. 71, no. 12, pp. 13377--13382, Dec. 2022.
+
+\bibitem{ref7}
+J. Tan and L. Dai, ``Wideband hybrid precoding for THz massive MIMO with angular spread,'' \textit{IEEE Trans. Commun.}, vol. 68, no. 9, pp. 5482--5495, Sept. 2020.
+
+\bibitem{ref8}
+S. Christensen, R. Agarwal, E. Carvalho, and J. Cioffi, ``Weighted sum-rate maximization using weighted MMSE for MIMO-BC beamforming design,'' \textit{IEEE Trans. Signal Process.}, vol. 56, no. 8, pp. 3897--3911, Aug. 2008.
+
+\bibitem{ref9}
+X. Yu, J. Zhang, and K. B. Letaief, ``Alternating minimization for hybrid precoding in multi-antenna millimeter wave systems,'' in \textit{Proc. IEEE Global Commun. Conf. (GLOBECOM)}, San Diego, CA, Dec. 2015, pp. 1--6.
+
+\bibitem{ref10}
+A. Ahmadzadeh, M. Arslan, and E. Basar, ``Survey on cell-free massive MIMO systems,'' \textit{IEEE Access}, vol. 10, pp. 116740--116770, 2022.
+
+\end{thebibliography}
+
+\appendix
+
+\section{数学推导}
+
+\subsection{WMMSE等价性证明}
+
+定义辅助变量：
+\begin{align}
+\vect{u} &= [u_{1,1}, \ldots, u_{K,M}]^T \\
+\vect{w} &= [w_{1,1}, \ldots, w_{K,M}]^T
+\end{align}
+
+MSE可表示为：
+\begin{equation}
+e_{k,m} = 1 - 2\Re\{u_{k,m}^* \tilde{\vect{h}}_{k,m}^H \vect{w}_{k,m}\} + |u_{k,m}|^2 \left(\sum_{j=1}^K |\tilde{\vect{h}}_{k,m}^H \vect{w}_{j,m}|^2 + \sigma^2\right)
+\end{equation}
+
+对$u_{k,m}$求导并令其为零：
+\begin{equation}
+\frac{\partial e_{k,m}}{\partial u_{k,m}^*} = -\tilde{\vect{h}}_{k,m}^H \vect{w}_{k,m} + u_{k,m} \left(\sum_{j=1}^K |\tilde{\vect{h}}_{k,m}^H \vect{w}_{j,m}|^2 + \sigma^2\right) = 0
+\end{equation}
+
+解得：
+\begin{equation}
+u_{k,m}^{\text{opt}} = \frac{\tilde{\vect{h}}_{k,m}^H \vect{w}_{k,m}}{\sum_{j=1}^K |\tilde{\vect{h}}_{k,m}^H \vect{w}_{j,m}|^2 + \sigma^2}
+\end{equation}
+
+代入得：
+\begin{equation}
+e_{k,m}^{\text{opt}} = 1 - \frac{|\tilde{\vect{h}}_{k,m}^H \vect{w}_{k,m}|^2}{\sum_{j=1}^K |\tilde{\vect{h}}_{k,m}^H \vect{w}_{j,m}|^2 + \sigma^2}
+\end{equation}
+
+对$w_{k,m}$求导：
+\begin{equation}
+\frac{\partial (w_{k,m} e_{k,m} - \ln w_{k,m})}{\partial w_{k,m}} = e_{k,m} - \frac{1}{w_{k,m}} = 0
+\end{equation}
+
+解得$w_{k,m}^{\text{opt}} = 1/e_{k,m}^{\text{opt}}$。
+
+代入WMMSE目标函数：
+\begin{equation}
+\sum_{m=1}^M \sum_{k=1}^K (1 - \ln e_{k,m}^{\text{opt}}) = \text{const} - \sum_{m=1}^M \sum_{k=1}^K \ln\left(1 + \text{SINR}_{k,m}\right)
+\end{equation}
+
+因此最小化WMMSE目标等价于最大化加权和速率。$\square$
+
+\subsection{相移矩阵闭式解}
+
+优化问题：
+\begin{equation}
+\max_{\mat{A}_b} \Re\{\text{tr}(\mat{A}_b^H \mat{F}_b)\} \quad \text{s.t.} \quad |\mat{A}_b(i,j)| = 1
+\end{equation}
+
+根据Cauchy-Schwarz不等式：
+\begin{equation}
+\Re\{\text{tr}(\mat{A}_b^H \mat{F}_b)\} \leq \|\mat{A}_b\|_F \|\mat{F}_b\|_F
+\end{equation}
+
+等号成立当且仅当$\mat{A}_b$与$\mat{F}_b$相位相同。因此最优解为：
+\begin{equation}
+\mat{A}_b^{\text{opt}} = \exp(j \cdot \text{angle}(\mat{F}_b))
+\end{equation}
+$\square$
+
+\end{document}

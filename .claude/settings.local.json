@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(find:*)",
+      "Bash(head:*)",
+      "Bash(ls:*)",
+      "Bash(python:*)",
+      "Bash(pip list:*)",
+      "Bash(conda list:*)",
+      "Bash(pip install:*)",
+      "Bash(dir:*)",
+      "Bash(grep:*)",
+      "Bash(git checkout:*)",
+      "Read(//d/claude_workspace/Railway/**)",
+      "Bash(rm -f BACKEND_SUMMARY.md PROJECT_STATUS_REPORT.md)",
+      "Read(//api/recommend/**)",
+      "Read(//tmp/**)",
+      "Bash(pandoc:*)",
+      "Bash(where antiword:*)",
+      "Bash(antiword:*)",
+      "Bash(pdftotext:*)",
+      "WebSearch"
+    ]
+  }
+}
